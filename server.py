@@ -1,5 +1,6 @@
 """GoalKoochik local pilot. Python 3.12+, no third-party dependencies."""
-import math, random
+import math, random, base64, binascii
+from urllib.parse import urlsplit, parse_qs
 import argparse, datetime as dt, hashlib, hmac, itertools, json, os, secrets, sqlite3, threading, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -9,6 +10,31 @@ ROOT = Path(__file__).resolve().parent
 DB = ROOT / 'data' / 'matchday.sqlite3'
 LOCK = threading.RLock()
 CATS = ['Goalkeeping', 'Defense', 'Stamina', 'Passing', 'Attacking']
+AVATARS = ['⚽','🥅','🦁','🐯','🦊','🐼','🐺','🦅']
+
+def validate_avatar(value):
+    require(type(value)==str,'Choose a profile picture or avatar.')
+    if value=='' or value in AVATARS: return value
+    prefix='data:image/jpeg;base64,'
+    require(value.startswith(prefix) and len(value)<=16407,'Profile photos must be compact JPEG images (up to 12 KB).')
+    try: data=base64.b64decode(value[len(prefix):],validate=True)
+    except (ValueError,binascii.Error): raise Invalid('Invalid profile photo.')
+    require(len(data)<=12288 and data[:2]==b'\xff\xd8' and data[-2:]==b'\xff\xd9','Invalid profile photo.')
+    offset=2; dimensions=None
+    while offset+4<=len(data):
+        require(data[offset]==255,'Invalid JPEG profile photo.')
+        while offset<len(data) and data[offset]==255: offset+=1
+        require(offset<len(data),'Invalid JPEG profile photo.')
+        marker=data[offset]; offset+=1
+        if marker in (0xda,0xd9): break
+        length=int.from_bytes(data[offset:offset+2],'big')
+        require(length>=2 and offset+length<=len(data),'Invalid JPEG profile photo.')
+        if marker in (0xc0,0xc1,0xc2):
+            require(length>=8,'Invalid JPEG profile photo.')
+            dimensions=(int.from_bytes(data[offset+3:offset+5],'big'),int.from_bytes(data[offset+5:offset+7],'big'))
+        offset+=length
+    require(dimensions is not None and all(0<n<=128 for n in dimensions),'Profile photos must be at most 128 × 128 pixels.')
+    return value
 
 class Invalid(Exception): pass
 class Connection(sqlite3.Connection):
@@ -182,7 +208,11 @@ def mutate(c,s,u,action,b):
         c.execute('INSERT INTO rating_history VALUES(?,?,?,?,?)',(u['id'],target,cat,score,now()))
     elif action=='profile':
         p=next(p for p in s['players'] if p.get('userId')==u['id']); name=str(b.get('name','')).strip()
-        require(0<len(name)<=50,'Enter a name.'); p['name']=name; c.execute('UPDATE users SET name=? WHERE id=?',(name,u['id']))
+        family=str(b.get('familyName',p.get('familyName',''))).strip(); nickname=str(b.get('nickname',p.get('nickname',''))).strip()
+        require(0<len(name)<=50 and len(family)<=50 and len(nickname)<=40,'Use up to 50 characters for each name and 40 for your nickname.')
+        avatar=validate_avatar(b.get('avatar',p.get('avatar','')))
+        p.update(name=name,familyName=family,nickname=nickname,avatar=avatar)
+        c.execute('UPDATE users SET name=? WHERE id=?',(' '.join(x for x in [name,family] if x),u['id']))
     else:
         m=next((m for m in s['matches'] if m['id']==b.get('match')),None); require(m is not None,'Match not found.')
         if action=='attendance':
@@ -263,12 +293,15 @@ class Handler(BaseHTTPRequestHandler):
         if not token:return None
         return c.execute('SELECT u.* FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token=? AND s.expires>?',(token.value,time.time())).fetchone()
     def do_GET(self):
-        self.path=self.path.split('?')[0]
+        query=parse_qs(urlsplit(self.path).query); self.path=self.path.split('?')[0]
         if self.path=='/api/state':
             with LOCK,connect() as c:
                 u=self.user(c)
                 if not u:return self.send(401,{'error':'Sign in to continue.'})
+                can_preview=u['role']=='organizer'; preview=can_preview and query.get('view')==['player']
+                if preview: u=dict(u); u['role']='player'
                 out=public(c,read(c),u)
+                out.update(canPreviewPlayer=can_preview,previewPlayer=preview)
                 for m in out['matches']:
                     m.pop('snapshot',None); m.pop('undo',None)
                     if u['role']!='organizer' and not m['confirmed']:

@@ -5,7 +5,11 @@ A mobile-first private soccer match organizer. Coordinate attendance, collect pr
 ## Features
 
 - Organizer and player accounts; revocable group invitation links; guests.
+- Profiles with family names, nicknames, emoji avatars, and small photos. Photos are square-cropped and resized on the device to at most 128 × 128 pixels / 12 KB; the server enforces those limits and stores only the compact JPEG. A new avatar replaces the current one.
+- Organizer player-view preview uses the same server filtering as regular player accounts, including hiding unpublished teams and organizer-only information. It uses the organizer's own identity; normal player actions still save normally.
 - Playing / Maybe / Not playing responses with an explicit Save response button.
+- Squad groups appear as Playing, Maybe, then Not playing / No response. The next-match card emphasizes date, time, location, and response counts.
+- Organizer CSV export for one or more matches from History. Records contain RSVP intentions, including waitlist status, rather than verified attendance.
 - Capacity and numbered waitlists; change match formats after attendance arrives.
 - Suggested 2–4 team formats, including uneven rosters such as 3/4 and 4/4/5; optional extra-player substitute rotation.
 - Five skill categories; configurable peer/self weighting; private submissions, organizer-only coverage metadata, and personal rating summaries.
@@ -30,7 +34,7 @@ Data is created in `data/matchday.sqlite3`. The internal storage filename is ret
 python -m unittest -v test_matchday.py test_hosted.py
 ```
 
-The suites cover aggregation, missing/self ratings, authentication and privacy, stale writes, attendance and waitlists, resizing, uneven multi-team generation, swaps/undo, protected hosted setup, HTTPS cookies, origin checks, rate limits, and backups. Tests use disposable databases under the ignored `work/` directory.
+The suites cover aggregation, missing/self ratings, authentication and privacy, stale writes, attendance and waitlists, resizing, uneven multi-team generation, swaps/undo, protected hosted setup, HTTPS cookies, origin checks, rate limits, backups, profile continuity, avatar validation, and player-preview filtering. Tests use disposable databases under the ignored `work/` directory.
 
 ## PythonAnywhere hosting
 

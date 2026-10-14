@@ -93,7 +93,7 @@ def application(environ,start_response):
         if path=='/api/setup' and not hmac.compare_digest(str(body.get('setupKey','')),CONFIG['setup_key']):
             return response(start_response,403,{'error':'Use the private organizer setup link supplied at deployment.'})
     handler=WSGIHandler.__new__(WSGIHandler)
-    handler.path=path+('?' +query if query and not path.startswith('/api/') else '')
+    handler.path=path+('?' +query if query and method=='GET' else '')
     handler.headers=Message()
     for key,value in environ.items():
         if key.startswith('HTTP_'):handler.headers[key[5:].replace('_','-')]=value
