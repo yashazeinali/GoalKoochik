@@ -219,7 +219,7 @@ def mutate(c,s,u,action,b):
             before=[(p,bool(m['attendance'][p].get('keeper'))) for p in participant_ids(m)]
             pid=b.get('player') if admin and b.get('player') else next(p['id'] for p in s['players'] if p.get('userId')==u['id'])
             require(any(p['id']==pid for p in s['players']),'Unknown player.')
-            status=b.get('status'); require(status in ['playing','maybe','out'],'Invalid response.')
+            status=b.get('status'); require(status in ['playing','out'],'Choose Playing or Not playing.')
             energy=b.get('energy','normal'); require(energy in ['low','normal','high'],'Invalid energy.')
             m['attendance'][pid]={'status':status,'keeper':bool(b.get('keeper')),'energy':energy,'at':now()}
             after=[(p,bool(m['attendance'][p].get('keeper'))) for p in participant_ids(m)]

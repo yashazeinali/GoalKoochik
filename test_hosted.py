@@ -7,6 +7,22 @@ class HostedTests(unittest.TestCase):
         (server.ROOT/'work').mkdir(exist_ok=True);self.temp=tempfile.TemporaryDirectory(dir=server.ROOT/'work');self.old=server.DB;server.DB=Path(self.temp.name)/'data'/'hosted.sqlite3'
         hosted.CONFIG={'host':'example.pythonanywhere.com','setup_key':'test-owner-setup-key'};hosted.READY=False
     def tearDown(self):server.DB=self.old;self.temp.cleanup()
+    def test_binary_responses_preserve_matches(self):
+        setup=self.request('/api/setup',{'name':'Organizer','username':'organizer','password':'host-test-password','setupKey':'test-owner-setup-key'},origin='https://example.pythonanywhere.com')
+        cookie=setup['headers']['Set-Cookie']
+        def state():return self.request('/api/state',cookie=cookie)['body']
+        def act(action,body):return self.request('/api/'+action,{**body,'revision':state()['revision']},cookie=cookie,origin='https://example.pythonanywhere.com')
+        for day,status in [('15','playing'),('22','out')]:
+            self.assertEqual(act('create_match',{'title':'Weekly match','date':f'2026-10-{day}T08:00','location':'Field','capacity':4})['status'],200)
+            self.assertEqual(act('attendance',{'match':state()['matches'][-1]['id'],'status':status})['status'],200)
+        before=state()
+        self.assertEqual(act('attendance',{'match':before['matches'][-1]['id'],'status':'maybe'})['status'],400)
+        self.assertEqual(state(),before)
+        # Reading older records must never rewrite legacy values, if any exist.
+        with server.connect() as c:
+            s=server.read(c);pid=s['players'][0]['id'];s['matches'][0]['attendance'][pid]['status']='maybe';server.save(c,s)
+        legacy=state();self.assertEqual(legacy['matches'][0]['attendance'][pid]['status'],'maybe')
+        self.assertEqual(state(),legacy)
     def test_avatar_limits(self):
         # SOF header with oversized dimensions must be rejected before storage.
         data=b'\xff\xd8\xff\xc0\x00\x11\x08'+(129).to_bytes(2,'big')*2+b'\x03\x01\x11\x00\x02\x11\x00\x03\x11\x00\xff\xd9'
