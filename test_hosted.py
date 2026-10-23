@@ -7,6 +7,18 @@ class HostedTests(unittest.TestCase):
         (server.ROOT/'work').mkdir(exist_ok=True);self.temp=tempfile.TemporaryDirectory(dir=server.ROOT/'work');self.old=server.DB;server.DB=Path(self.temp.name)/'data'/'hosted.sqlite3'
         hosted.CONFIG={'host':'example.pythonanywhere.com','setup_key':'test-owner-setup-key'};hosted.READY=False
     def tearDown(self):server.DB=self.old;self.temp.cleanup()
+    def test_development_label_and_environment_isolation(self):
+        self.assertNotIn(b'DEVELOPMENT',self.request('/')['body'])
+        hosted.CONFIG['environment']='development'
+        dev=self.request('/')
+        self.assertEqual(dev['status'],200);self.assertIn(b'DEVELOPMENT',dev['body'])
+        setup=self.request('/api/setup',query='setup=test-owner-setup-key')['body']
+        self.assertTrue(setup['needsSetup']);self.assertEqual(setup['environment'],'development');self.assertNotIn('setup_key',setup)
+        r=self.request('/api/setup',{'name':'Dev organizer','username':'devorganizer','password':'host-test-password','setupKey':'test-owner-setup-key'},origin='https://example.pythonanywhere.com')
+        state=self.request('/api/state',cookie=r['headers']['Set-Cookie'])['body']
+        self.assertEqual(state['environment'],'development');self.assertIn('release',state)
+        hosted.CONFIG['environment']='invalid'
+        self.assertEqual(self.request('/')['status'],503)
     def test_binary_responses_preserve_matches(self):
         setup=self.request('/api/setup',{'name':'Organizer','username':'organizer','password':'host-test-password','setupKey':'test-owner-setup-key'},origin='https://example.pythonanywhere.com')
         cookie=setup['headers']['Set-Cookie']

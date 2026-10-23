@@ -3,7 +3,7 @@
 Reuses the tested request handlers and optimizer; does not run a development server.
 One WSGI worker is required for the pilot's SQLite/thread-lock architecture.
 """
-import io, json, hmac, time, hashlib, sqlite3, datetime
+import io, json, hmac, time, hashlib, sqlite3, datetime, re
 from pathlib import Path
 from urllib.parse import parse_qs
 from http import HTTPStatus
@@ -13,6 +13,13 @@ import server
 CONFIG_PATH = Path(__file__).resolve().parent / 'deployment_config.json'
 CONFIG = json.loads(CONFIG_PATH.read_text(encoding='utf-8')) if CONFIG_PATH.exists() else {}
 READY = False
+
+def release_metadata():
+    manifest=Path(__file__).resolve().parent/'release_manifest.json'
+    try:
+        revision=json.loads(manifest.read_text(encoding='utf-8')).get('revision','')
+    except (OSError,ValueError): revision=''
+    return {'environment':CONFIG.get('environment','production'),'release':revision if re.fullmatch('[0-9a-f]{40}',revision) else 'unversioned'}
 
 class WSGIHandler(server.Handler):
     def send_response(self,code,message=None): self.status=code
@@ -63,6 +70,8 @@ def application(environ,start_response):
     host=CONFIG.get('host','')
     if not host or not CONFIG.get('setup_key'):
         return response(start_response,503,{'error':'Hosting configuration has not been completed.'})
+    if CONFIG.get('environment','production') not in ('development','production'):
+        return response(start_response,503,{'error':'Invalid hosting environment configuration.'})
     if environ.get('HTTP_HOST')!=host:
         return response(start_response,400,{'error':'Invalid host.'})
     path=environ.get('PATH_INFO','/');query=environ.get('QUERY_STRING','')
@@ -75,7 +84,7 @@ def application(environ,start_response):
     if path=='/api/setup' and method=='GET':
         supplied=parse_qs(query).get('setup',[''])[0]
         with server.connect() as c: empty=not bool(c.execute('SELECT 1 FROM users').fetchone())
-        return response(start_response,200,{'needsSetup':empty and hmac.compare_digest(supplied,CONFIG['setup_key'])})
+        return response(start_response,200,{'needsSetup':empty and hmac.compare_digest(supplied,CONFIG['setup_key']),**release_metadata()})
     data=b''
     if method=='POST':
         if environ.get('HTTP_ORIGIN')!='https://'+host:return response(start_response,403,{'error':'Invalid request origin.'})
@@ -107,8 +116,13 @@ def application(environ,start_response):
         ('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"),
         ('Strict-Transport-Security','max-age=31536000')]
     result=handler.wfile.getvalue()
+    metadata=release_metadata()
+    if path=='/' and handler.status==200 and metadata['environment']=='development':
+        label=metadata['release'][:12]
+        banner=f'<div role="status" style="background:#fff0ce;color:#62450e;padding:12px 20px;text-align:center;font:600 13px system-ui;border-bottom:2px solid #d9ae46">DEVELOPMENT · Test data only · Build {label}</div>'
+        result=result.replace(b'<body>',b'<body>'+banner.encode(),1)
     # UI can distinguish hosted and local mode without leaking deployment secrets.
     if path=='/api/state' and handler.status==200:
-        state=json.loads(result);state['hosted']=True;result=json.dumps(state).encode()
+        state=json.loads(result);state.update(hosted=True,**metadata);result=json.dumps(state).encode()
     start_response(f'{handler.status} {HTTPStatus(handler.status).phrase}',headers)
     return [result]

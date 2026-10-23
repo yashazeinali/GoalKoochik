@@ -31,7 +31,7 @@ Data is created in `data/matchday.sqlite3`. The internal storage filename is ret
 ## Tests
 
 ```bash
-python -m unittest -v test_matchday.py test_hosted.py
+python -m unittest -v test_matchday.py test_hosted.py test_release.py
 ```
 
 The suites cover aggregation, missing/self ratings, authentication and privacy, stale writes, attendance and waitlists, resizing, uneven multi-team generation, swaps/undo, protected hosted setup, HTTPS cookies, origin checks, rate limits, backups, profile continuity, avatar validation, and player-preview filtering. Tests use disposable databases under the ignored `work/` directory.
@@ -70,6 +70,6 @@ Balance compares starting-player category averages across teams. Substitutes are
 
 ## Updating
 
-Replace code and static files, preserve private data/configuration, reload the PythonAnywhere web app, and refresh browsers. Repository publication does not automatically deploy changes to the website.
+Follow [DEPLOYMENT.md](DEPLOYMENT.md): build a code-only archive from a pinned Git commit, test that archive in Dev, and promote the same artifact to production. Each environment keeps its own database and private configuration. Dev has a visible DEVELOPMENT banner and release ID. Back up production data before promotion, preserve private data/configuration during unpacking, reload the PythonAnywhere web app, and refresh browsers. Repository publication does not automatically deploy changes to either website.
 
 This repository contains source and synthetic test fixtures only. It does not contain player data, live accounts, sessions, backups, invitation tokens, or production setup keys.

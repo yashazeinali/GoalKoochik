@@ -1,12 +1,16 @@
 """Run on PythonAnywhere once, before enabling the web app."""
-import json, secrets, re, os
+import json, secrets, re, os, argparse
 from pathlib import Path
 root=Path(__file__).resolve().parent
-host=input('Your full PythonAnywhere hostname: ').strip().lower()
+parser=argparse.ArgumentParser(description='Create private hosting configuration for a new environment.')
+parser.add_argument('--host',help='Full PythonAnywhere hostname')
+parser.add_argument('--environment',choices=['development','production'],default='production')
+args=parser.parse_args()
+host=(args.host or input('Your full PythonAnywhere hostname: ')).strip().lower()
 if not re.fullmatch(r'[a-z0-9-]+\.(?:eu\.)?pythonanywhere\.com',host):raise SystemExit('Enter your actual PythonAnywhere hostname.')
 target=root/'deployment_config.json'
 if target.exists():raise SystemExit('Configuration already exists; preserve it when updating the app.')
-config={'host':host,'setup_key':secrets.token_urlsafe(32)}
+config={'host':host,'environment':args.environment,'setup_key':secrets.token_urlsafe(32)}
 target.write_text(json.dumps(config),encoding='utf-8');os.chmod(target,0o600)
 import server
 server.init()

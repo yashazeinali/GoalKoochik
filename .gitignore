@@ -11,3 +11,4 @@ deployment_config.json
 .env.*
 !.env.example
 *.zip
+release_manifest.json
